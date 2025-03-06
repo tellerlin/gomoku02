@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Board from './Board';
 import PlayerSelectionModal from './PlayerSelectionModal';
 import { gomokuAI } from '../utils/gomokuAI';
+import { saveAs } from 'file-saver';
 
 const BOARD_SIZE = 15;
 const WIN_CONDITION = 5;
@@ -25,13 +26,12 @@ export default function Game() {
   const [showHints, setShowHints] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
-  
+
   const addGameLog = (message: string) => {
     const time = new Date().toLocaleTimeString();
     setGameLog(prev => [`[${time}] ${message}`, ...prev]);
   };
 
-  // 添加难度设置处理函数
   const handleDifficultyChange = (newDifficulty: 'easy' | 'medium' | 'hard') => {
     setDifficulty(newDifficulty);
     addGameLog(`难度设置已更改为: ${
@@ -39,9 +39,22 @@ export default function Game() {
       newDifficulty === 'medium' ? '中等' : '困难'
     }`);
     
-    // 如果游戏已经开始，可以在这里通知 AI 难度变化
     if (gameStarted) {
       gomokuAI.setDifficulty(newDifficulty);
+    }
+  };
+
+  const handleExportGameRecord = () => {
+    console.log('导出棋谱按钮被点击'); // 调试日志
+    try {
+      const gameRecord = gomokuAI.exportGameRecord(squares, playerIsBlack!);
+      const blob = new Blob([gameRecord], { type: 'text/plain;charset=utf-8' });
+      const timestamp = new Date().toISOString().split('T')[0];
+      saveAs(blob, `gomoku-game-${timestamp}.txt`);
+      addGameLog('棋谱已导出');
+    } catch (error) {
+      console.error('导出棋谱失败:', error); // 捕获并记录错误
+      addGameLog('导出棋谱失败，请检查控制台日志');
     }
   };
 
@@ -170,8 +183,6 @@ export default function Game() {
     return bestMove;
   };
 
-  // 删除原来的evaluatePosition和findBestMove函数
-  
   const makeComputerMove = () => {
     if (winner || (isBlackNext === playerIsBlack)) return;
     const bestMove = gomokuAI.findBestMove(squares);
@@ -181,23 +192,20 @@ export default function Game() {
   useEffect(() => {
     if (!gameStarted || winner) return;
     
-    // 如果玩家选择白棋（playerIsBlack为false），AI先下一步黑棋
     if (!playerIsBlack && isBlackNext && totalMoves === 0) {
       const timer = setTimeout(() => {
-        // 计算棋盘中心点位置
         const centerPos = Math.floor(BOARD_SIZE * BOARD_SIZE / 2);
         handleClick(centerPos);
       }, 500);
       return () => clearTimeout(timer);
     }
     
-    // 在游戏进行中，当轮到AI时才下棋
     if (isBlackNext !== playerIsBlack && totalMoves > 0) {
       const timer = setTimeout(makeComputerMove, 500);
       return () => clearTimeout(timer);
     }
   }, [isBlackNext, playerIsBlack, winner, gameStarted, totalMoves]);
-  
+
   const handleClick = (i: number) => {
     if (winner || squares[i]) return;
 
@@ -214,7 +222,7 @@ export default function Game() {
     setSquares(newSquares);
     setLastMoveTime(currentTime);
     setTotalMoves(prev => prev + 1);
-    setLastMove(i); // 设置最后一步的位置
+    setLastMove(i);
 
     const newWinner = checkWinner(newSquares, i);
     if (newWinner) {
@@ -227,7 +235,6 @@ export default function Game() {
     }
   };
 
-  // 修改 handleColorSelect 函数，接收难度参数
   const handleColorSelect = (isBlack: boolean, difficulty: 'easy' | 'medium' | 'hard') => {
     setPlayerIsBlack(isBlack);
     setGameStarted(true);
@@ -237,11 +244,9 @@ export default function Game() {
       difficulty === 'medium' ? '中等' : '困难'
     }`]);
     
-    // 设置 AI 难度
     gomokuAI.setDifficulty(difficulty);
   };
 
-  // 在重置游戏时，我们需要重置所有状态，包括难度选择
   const resetGame = () => {
     setSquares(Array(BOARD_SIZE * BOARD_SIZE).fill(null));
     setIsBlackNext(true);
@@ -254,7 +259,6 @@ export default function Game() {
     setPlayerIsBlack(null);
     setGameLog(['请选择执黑或执白']);
     setLastMove(null);
-    // 不重置难度，保持用户之前的选择
   };
 
   const updateScores = (winner: string) => {
@@ -303,6 +307,13 @@ export default function Game() {
               >
                 重新开始
               </button>
+              <button
+                onClick={handleExportGameRecord}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                style={{ border: '2px solid red' }} // 添加红色边框以确认按钮是否存在
+              >
+                导出棋谱
+              </button>
             </div>
           </>
         )}
@@ -348,6 +359,20 @@ export default function Game() {
                   type="checkbox" 
                   checked={showHints} 
                   onChange={() => setShowHints(!showHints)} 
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            
+            {/* 声音开关 */}
+            <div className="flex items-center justify-between">
+              <span>声音效果</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={soundEnabled} 
+                  onChange={() => setSoundEnabled(!soundEnabled)} 
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
