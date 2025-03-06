@@ -20,6 +20,9 @@ export default function Game() {
   const [averageMoveTime, setAverageMoveTime] = useState(0);
   const [maxMoveTime, setMaxMoveTime] = useState(0);
   const [gameLog, setGameLog] = useState<string[]>(['请选择执黑或执白']);
+  const [lastMove, setLastMove] = useState<number | null>(null);
+  const [showHints, setShowHints] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const addGameLog = (message: string) => {
     const time = new Date().toLocaleTimeString();
@@ -177,7 +180,7 @@ export default function Game() {
       return () => clearTimeout(timer);
     }
   }, [isBlackNext, playerIsBlack, winner, gameStarted, totalMoves]);
-
+  
   const handleClick = (i: number) => {
     if (winner || squares[i]) return;
 
@@ -194,6 +197,7 @@ export default function Game() {
     setSquares(newSquares);
     setLastMoveTime(currentTime);
     setTotalMoves(prev => prev + 1);
+    setLastMove(i); // 设置最后一步的位置
 
     const newWinner = checkWinner(newSquares, i);
     if (newWinner) {
@@ -223,23 +227,24 @@ export default function Game() {
     setGameStarted(false);
     setPlayerIsBlack(null);
     setGameLog(['请选择执黑或执白']);
+    setLastMove(null);
   };
 
   const updateScores = (winner: string) => {
-    if (winner === 'X') {
+    if ((winner === 'X' && playerIsBlack) || (winner === 'O' && !playerIsBlack)) {
       setPlayerScore(prev => prev + 1);
-    } else if (winner === 'O') {
+    } else {
       setComputerScore(prev => prev + 1);
     }
   };
 
   const status = winner
     ? `获胜者: ${winner === 'X' ? '黑棋' : '白棋'}`
-    : `下一步: ${isBlackNext ? '黑棋' : '白棋'}`;
+    : `下一步: ${isBlackNext ? '黑棋' : '白棋'}${isBlackNext !== playerIsBlack ? ' (AI思考中...)' : ' (请您落子)'}`;
 
   return (
-    <div className="flex gap-8 p-4 max-w-7xl mx-auto">
-      <div className="flex-shrink-0">
+    <div className="flex flex-col md:flex-row gap-8 p-4 max-w-7xl mx-auto">
+      <div className="flex-shrink-0 w-full md:w-auto">
         {!gameStarted ? (
           <div className="text-center mb-4">
             <h2 className="text-xl font-bold mb-4">请选择您要执的棋子</h2>
@@ -260,8 +265,23 @@ export default function Game() {
           </div>
         ) : (
           <>
-            <div className="text-xl font-bold mb-4">{status}</div>
-            <Board size={BOARD_SIZE} squares={squares} onSquareClick={handleClick} />
+            <div className={`text-xl font-bold mb-4 p-2 rounded ${
+              winner 
+                ? 'bg-green-100 text-green-800' 
+                : isBlackNext === playerIsBlack 
+                  ? 'bg-blue-100 text-blue-800' 
+                  : 'bg-gray-100 text-gray-800'
+            }`}>
+              {status}
+            </div>
+            <div className="overflow-x-auto">
+              <Board 
+                size={BOARD_SIZE} 
+                squares={squares} 
+                onSquareClick={handleClick}
+                lastMove={lastMove} 
+              />
+            </div>
             <div className="flex gap-4 mt-4 justify-center">
               <button
                 onClick={resetGame}
@@ -273,7 +293,7 @@ export default function Game() {
           </>
         )}
       </div>
-      <div className="flex-1 max-w-md space-y-4">
+      <div className="flex-1 max-w-md space-y-4 w-full">
         <div className="panel-card">
           <h3 className="text-lg font-bold mb-3">比分</h3>
           <div className="flex gap-4 justify-center">
@@ -303,6 +323,23 @@ export default function Game() {
             ))}
           </div>
         </div>
+        <div className="panel-card">
+          <h3 className="text-lg font-bold mb-3">游戏设置</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span>显示提示</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={showHints} 
+                  onChange={() => setShowHints(!showHints)} 
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -311,6 +348,67 @@ export default function Game() {
 // 计算获胜者的函数
 function calculateWinner(squares: (string | null)[]) {
   // 实现五子棋的获胜逻辑
-  // ...
+  const lines = [];
+  const size = Math.sqrt(squares.length);
+  
+  // 检查所有可能的五子连线
+  // 横向
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col <= size - 5; col++) {
+      const line = [];
+      for (let i = 0; i < 5; i++) {
+        line.push(row * size + col + i);
+      }
+      lines.push(line);
+    }
+  }
+  
+  // 纵向
+  for (let col = 0; col < size; col++) {
+    for (let row = 0; row <= size - 5; row++) {
+      const line = [];
+      for (let i = 0; i < 5; i++) {
+        line.push((row + i) * size + col);
+      }
+      lines.push(line);
+    }
+  }
+  
+  // 右下斜
+  for (let row = 0; row <= size - 5; row++) {
+    for (let col = 0; col <= size - 5; col++) {
+      const line = [];
+      for (let i = 0; i < 5; i++) {
+        line.push((row + i) * size + col + i);
+      }
+      lines.push(line);
+    }
+  }
+  
+  // 左下斜
+  for (let row = 0; row <= size - 5; row++) {
+    for (let col = 4; col < size; col++) {
+      const line = [];
+      for (let i = 0; i < 5; i++) {
+        line.push((row + i) * size + col - i);
+      }
+      lines.push(line);
+    }
+  }
+  
+  // 检查是否有一方获胜
+  for (const line of lines) {
+    const [a, b, c, d, e] = line;
+    if (
+      squares[a] &&
+      squares[a] === squares[b] &&
+      squares[a] === squares[c] &&
+      squares[a] === squares[d] &&
+      squares[a] === squares[e]
+    ) {
+      return squares[a];
+    }
+  }
+  
   return null;
 }

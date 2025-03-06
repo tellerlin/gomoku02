@@ -6,9 +6,10 @@ interface BoardProps {
   size: number;
   squares: (string | null)[];
   onSquareClick: (index: number) => void;
+  lastMove?: number | null;
 }
 
-export default function Board({ size, squares, onSquareClick }: BoardProps) {
+export default function Board({ size, squares, onSquareClick, lastMove }: BoardProps) {
   // 判断是否是星位
   const isStarPoint = (row: number, col: number) => {
     // 定义星位的位置（按照标准围棋棋盘的星位）
@@ -27,9 +28,9 @@ export default function Board({ size, squares, onSquareClick }: BoardProps) {
       <div 
         className="relative" 
         style={{
-          width: `${30 * (size - 1)}px`,
+          width: `${30 * (size - 1)}px`, // 确保棋盘尺寸正确
           height: `${30 * (size - 1)}px`,
-          backgroundColor: '#DEB887' // 棋盘底色
+          backgroundColor: '#DEB887'
         }}
       >
         {/* 绘制横线 */}
@@ -88,21 +89,33 @@ export default function Board({ size, squares, onSquareClick }: BoardProps) {
                 key={`point-${row}-${col}`}
                 className="absolute cursor-pointer"
                 style={{
-                  width: '30px',
+                  width: '30px', // 确保交互区域大小正确
                   height: '30px',
-                  left: `${col * 30 - 15}px`,
-                  top: `${row * 30 - 15}px`,
+                  left: `${col * 30}px`,
+                  top: `${row * 30}px`,
+                  transform: 'translate(-50%, -50%)', // 确保中心对齐
                   zIndex: 20
                 }}
                 onClick={() => !squares[index] && onSquareClick(index)}
               >
+                {index === lastMove && (
+                  <div className="absolute w-full h-full bg-yellow-300 opacity-30 rounded-full" />
+                )}
+                
                 {squares[index] && (
                   <div
-                    className={`absolute w-5 h-5 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-transform ${
+                    className={`absolute rounded-full ${
                       squares[index] === 'X' 
                         ? 'bg-black-piece shadow-md' 
                         : 'bg-white-piece border border-black-piece'
-                    } hover:scale-105`}
+                    }`}
+                    style={{
+                      width: '22px', // 确保棋子大小正确
+                      height: '22px',
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)' // 确保中心对齐
+                    }}
                   />
                 )}
               </div>
