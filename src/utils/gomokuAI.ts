@@ -4,12 +4,22 @@ type Position = { row: number; col: number };
 type ThreatInfo = { type: string; score: number; positions: number[] };
 
 class GomokuAI {
-    private boardSize: number = 15;
-    private difficulty: Difficulty = 'medium';
-    private moveHistory: { x: number; y: number; color: string }[] = [];
-    private playerPiece: string = 'X';  // 玩家默认使用黑棋
-    private computerPiece: string = 'O'; // AI默认使用白棋
-    private winCondition: number = 5;   // 连子数量
+  private boardSize: number = 15;
+  private difficulty: Difficulty = 'medium';
+  private moveHistory: { x: number; y: number; color: string }[] = [];
+  private playerPiece: string = 'X';
+  private computerPiece: string = 'O';
+  private winCondition: number = 5;
+
+  resetMoveHistory(): void {
+    this.moveHistory = [];
+}
+  // 将 recordMove 方法改为公共方法
+  recordMove(moveIndex: number, pieceColor: string): void {
+      const row = Math.floor(moveIndex / this.boardSize);
+      const col = moveIndex % this.boardSize;
+      this.moveHistory.push({ x: row, y: col, color: pieceColor });
+  }
 
   setDifficulty(difficulty: Difficulty) {
       this.difficulty = difficulty;
@@ -24,75 +34,72 @@ class GomokuAI {
       this.moveHistory = [];
   }
 
-  findBestMove(squares: Square[]): number {
-      // 创建棋盘副本，避免修改原始数据
-      const boardCopy = [...squares];
-      
-      // 检查是否有立即获胜的着法
-      const winningMove = this.findWinningMove(boardCopy, this.computerPiece);
-      if (winningMove !== -1) {
-          this.recordMove(winningMove);
-          return winningMove;
-      }
-      
-      // 检查是否需要阻止玩家获胜
-      const blockingMove = this.findWinningMove(boardCopy, this.playerPiece);
-      if (blockingMove !== -1) {
-          this.recordMove(blockingMove);
-          return blockingMove;
-      }
-      
-      // 获取候选着法并按威胁程度排序
-      const candidates = this.getPrioritizedMoves(boardCopy);
-      
-      // 根据难度确定搜索深度
-      const searchDepth = this.getSearchDepth();
-      
-      let bestMove = candidates[0];
-      let bestScore = -Infinity;
-      const weights = this.getDifficultyWeights();
-
-      // 对每个候选着法进行评估
-      for (const move of candidates) {
-          // 模拟这步棋
-          boardCopy[move] = this.computerPiece;
-          
-          // 计算当前移动的分数
-          let score: number;
-          
-          if (searchDepth > 1 && candidates.length < 10) {
-              // 使用极小化极大算法进行深度搜索
-              score = this.minimax(boardCopy, searchDepth - 1, false, -Infinity, Infinity);
-          } else {
-              // 使用启发式评估
-              score = this.evaluateBoard(boardCopy, move, weights);
-          }
-          
-          // 撤销模拟
-          boardCopy[move] = null;
-          
-          // 更新最佳着法
-          if (score > bestScore) {
-              bestScore = score;
-              bestMove = move;
-          }
-          
-          // 在简单难度下，增加随机性
-          if (this.difficulty === 'easy' && Math.random() < 0.3) {
-              bestMove = candidates[Math.floor(Math.random() * Math.min(5, candidates.length))];
-          }
-      }
-
-      this.recordMove(bestMove);
-      return bestMove;
+findBestMove(squares: Square[]): number {
+  const boardCopy = [...squares];
+  
+  // 检查是否有立即获胜的着法
+  const winningMove = this.findWinningMove(boardCopy, this.computerPiece);
+  if (winningMove !== -1 && boardCopy[winningMove] === null) {
+      this.recordMove(winningMove, this.computerPiece);
+      return winningMove;
   }
   
-  private recordMove(moveIndex: number): void {
-      const row = Math.floor(moveIndex / this.boardSize);
-      const col = moveIndex % this.boardSize;
-      this.moveHistory.push({ x: row, y: col, color: this.computerPiece });
+  // 检查是否需要阻止玩家获胜
+  const blockingMove = this.findWinningMove(boardCopy, this.playerPiece);
+  if (blockingMove !== -1 && boardCopy[blockingMove] === null) {
+      this.recordMove(blockingMove, this.computerPiece);
+      return blockingMove;
   }
-    
+  
+  // 获取候选着法
+  const candidates = this.getPrioritizedMoves(boardCopy)
+      .filter(move => boardCopy[move] === null)
+      .slice(0, 8);  // 限制候选数量以提高效率
+  
+  if (candidates.length === 0) {
+      console.error('No valid moves available');
+      return -1;
+  }
+  
+  const searchDepth = this.getSearchDepth();
+  let bestMove = candidates[0];
+  let bestScore = -Infinity;
+  
+  // 使用 minimax 算法评估每个候选着法
+  for (const move of candidates) {
+      if (boardCopy[move] !== null) continue;
+      
+      boardCopy[move] = this.computerPiece;
+      const score = this.minimax(
+          boardCopy, 
+          searchDepth - 1, 
+          false, 
+          -Infinity, 
+          Infinity
+      );
+      boardCopy[move] = null;
+      
+      // 更新最佳着法
+      if (score > bestScore) {
+          bestScore = score;
+          bestMove = move;
+      }
+      
+      // 在简单难度下增加随机性
+      if (this.difficulty === 'easy' && Math.random() < 0.3) {
+          const validRandomMoves = candidates.filter(m => boardCopy[m] === null);
+          bestMove = validRandomMoves[Math.floor(Math.random() * validRandomMoves.length)];
+      }
+  }
+  
+  // 记录并返回最佳着法
+  if (boardCopy[bestMove] === null) {
+      this.recordMove(bestMove, this.computerPiece);
+  }
+  
+  return bestMove;
+}
+
     private getSearchDepth(): number {
         switch (this.difficulty) {
             case 'easy': return 1;
@@ -103,71 +110,103 @@ class GomokuAI {
     }
     
     private minimax(
-        board: Square[], 
-        depth: number, 
-        isMaximizing: boolean, 
-        alpha: number, 
-        beta: number
-    ): number {
-        // 终止条件：达到搜索深度或游戏结束
-        if (depth === 0) {
-            return this.evaluateBoard(board, -1, this.getDifficultyWeights());
+      board: Square[], 
+      depth: number, 
+      isMaximizing: boolean, 
+      alpha: number, 
+      beta: number
+  ): number {
+      // 检查是否达到终止条件
+      if (depth === 0) {
+          return this.evaluateBoard(board, -1, this.getDifficultyWeights());
+      }
+      
+      // 获取并过滤候选着法
+      const candidates = this.getPrioritizedMoves(board)
+          .filter(move => board[move] === null)
+          .slice(0, 6); // 进一步限制搜索分支
+      
+      if (isMaximizing) {
+          let maxScore = -Infinity;
+          for (const move of candidates) {
+              // 模拟落子
+              board[move] = this.computerPiece;
+              const score = this.minimax(board, depth - 1, false, alpha, beta);
+              board[move] = null;
+              
+              maxScore = Math.max(maxScore, score);
+              alpha = Math.max(alpha, score);
+              
+              // Alpha-Beta 剪枝
+              if (beta <= alpha) break;
+          }
+          return maxScore;
+      } else {
+          let minScore = Infinity;
+          for (const move of candidates) {
+              // 模拟落子
+              board[move] = this.playerPiece;
+              const score = this.minimax(board, depth - 1, true, alpha, beta);
+              board[move] = null;
+              
+              minScore = Math.min(minScore, score);
+              beta = Math.min(beta, score);
+              
+              // Alpha-Beta 剪枝
+              if (beta <= alpha) break;
+          }
+          return minScore;
+      }
+  }
+    
+  private findWinningMove(board: Square[], piece: string): number {
+    // 获取所有空位而不仅仅是候选位置，确保不会漏掉关键防守点
+    const allEmptyPositions = [];
+    for (let i = 0; i < board.length; i++) {
+        if (board[i] === null) {
+            allEmptyPositions.push(i);
         }
-        
-        const candidates = this.getPrioritizedMoves(board).slice(0, 5); // 限制分支因子
-        
-        if (isMaximizing) {
-            let maxScore = -Infinity;
-            for (const move of candidates) {
-                if (board[move] !== null) continue;
-                
-                board[move] = this.computerPiece;
-                const score = this.minimax(board, depth - 1, false, alpha, beta);
-                board[move] = null;
-                
-                maxScore = Math.max(maxScore, score);
-                alpha = Math.max(alpha, score);
-                if (beta <= alpha) break; // Alpha-Beta剪枝
-            }
-            return maxScore;
-        } else {
-            let minScore = Infinity;
-            for (const move of candidates) {
-                if (board[move] !== null) continue;
-                
-                board[move] = this.playerPiece;
-                const score = this.minimax(board, depth - 1, true, alpha, beta);
-                board[move] = null;
-                
-                minScore = Math.min(minScore, score);
-                beta = Math.min(beta, score);
-                if (beta <= alpha) break; // Alpha-Beta剪枝
-            }
-            return minScore;
-        }
-    }
-
-    private findWinningMove(board: Square[], piece: string): number {
-        const candidates = this.getCandidateMoves(board);
-        
-        for (const move of candidates) {
-            if (board[move] !== null) continue;
-            
-            // 模拟落子
-            board[move] = piece;
-            
-            // 检查是否形成五连
-            if (this.checkWin(board, move)) {
-                board[move] = null;
-                return move;
-            }
-            
-            board[move] = null;
-        }
-        
-        return -1;
     }
     
+    // 先检查候选位置（效率更高）
+    const candidates = this.getCandidateMoves(board);
+    
+    // 检查候选位置
+    for (const move of candidates) {
+        if (board[move] !== null) continue;
+        
+        // 模拟落子
+        board[move] = piece;
+        
+        // 检查是否形成五连
+        if (this.checkWin(board, move)) {
+            board[move] = null;
+            return move;
+        }
+        
+        board[move] = null;
+    }
+    
+    // 检查所有空位（确保不会漏掉关键防守点）
+    for (const move of allEmptyPositions) {
+        // 跳过已经检查过的候选位置
+        if (candidates.includes(move) || board[move] !== null) continue;
+        
+        // 模拟落子
+        board[move] = piece;
+        
+        // 检查是否形成五连
+        if (this.checkWin(board, move)) {
+            board[move] = null;
+            return move;
+        }
+        
+        board[move] = null;
+    }
+    
+    return -1;
+}
+
     private checkWin(board: Square[], moveIndex: number): boolean {
         const piece = board[moveIndex];
         if (!piece) return false;
@@ -218,31 +257,60 @@ class GomokuAI {
         return false;
     }
 
-    private getDifficultyWeights() {
-        switch (this.difficulty) {
-            case 'easy':
-                return {
-                    offense: 0.8,
-                    defense: 1.0,  // 防守权重提高，使AI更注重防守
-                    position: 0.5,
-                    threat: 0.7    // 威胁评估权重降低
-                };
-            case 'hard':
-                return {
-                    offense: 1.2,
-                    defense: 1.0,
-                    position: 0.8,
-                    threat: 1.3    // 威胁评估权重提高
-                };
-            default: // medium
-                return {
-                    offense: 1.0,
-                    defense: 1.0,
-                    position: 0.6,
-                    threat: 1.0
-                };
-        }
-    }
+// 新增：评估连续威胁的方法
+private evaluateConsecutiveThreats(board: Square[], lastMove: number, depth: number): number {
+  if (depth === 0) return 0;
+  
+  let score = 0;
+  const threats = this.detectThreats(board, this.computerPiece);
+  
+  // 评估己方威胁
+  for (const threat of threats) {
+      if (threat.type.includes('four')) {
+          score += 5000;
+      } else if (threat.type.includes('three')) {
+          score += 1000;
+      }
+  }
+  
+  // 评估对手威胁
+  const opponentThreats = this.detectThreats(board, this.playerPiece);
+  for (const threat of opponentThreats) {
+      if (threat.type.includes('four')) {
+          score -= 8000;  // 增加防守权重
+      } else if (threat.type.includes('three')) {
+          score -= 2000;  // 增加对活三的重视
+      }
+  }
+  
+  return score;
+}
+
+private getDifficultyWeights() {
+  switch (this.difficulty) {
+      case 'easy':
+          return {
+              offense: 0.8,
+              defense: 1.5,  // 提高防守权重
+              position: 0.5,
+              threat: 0.7
+          };
+      case 'hard':
+          return {
+              offense: 1.2,
+              defense: 2.0,  // 显著提高防守权重
+              position: 0.8,
+              threat: 2.0    // 提高威胁评估权重
+          };
+      default: // medium
+          return {
+              offense: 1.0,
+              defense: 1.8,  // 提高防守权重
+              position: 0.6,
+              threat: 1.5    // 提高威胁评估权重
+          };
+  }
+}
 
     private getPrioritizedMoves(squares: Square[]): number[] {
         const candidates = this.getCandidateMoves(squares);
@@ -346,29 +414,35 @@ class GomokuAI {
         return score;
     }
 
+
     private evaluateThreats(squares: Square[], moveIndex: number, piece: string): number {
-        // 模拟落子
-        squares[moveIndex] = piece;
-        
-        // 检测威胁
-        const threats = this.detectThreats(squares, piece);
-        
-        // 撤销模拟
-        squares[moveIndex] = null;
-        
-        // 计算威胁总分
-        let totalScore = 0;
-        for (const threat of threats) {
-            totalScore += threat.score;
-            
-            // 如果威胁包含当前位置，额外加分
-            if (threat.positions.includes(moveIndex)) {
-                totalScore += threat.score * 0.5;
-            }
-        }
-        
-        return totalScore;
-    }
+      // 模拟落子
+      squares[moveIndex] = piece;
+      
+      // 检测威胁
+      const threats = this.detectThreats(squares, piece);
+      
+      // 撤销模拟
+      squares[moveIndex] = null;
+      
+      // 计算威胁总分
+      let totalScore = 0;
+      for (const threat of threats) {
+          totalScore += threat.score;
+          
+          // 如果威胁包含当前位置，额外加分
+          if (threat.positions.includes(moveIndex)) {
+              totalScore += threat.score * 0.8;  // 增加权重
+          }
+          
+          // 对潜在获胜威胁额外加分
+          if (threat.type === 'potential-win') {
+              totalScore += 2000;  // 额外加分
+          }
+      }
+      
+      return totalScore;
+  }
 
     private detectThreats(squares: Square[], piece: string): ThreatInfo[] {
         const threats: ThreatInfo[] = [];
@@ -408,96 +482,135 @@ class GomokuAI {
         return threats;
     }
 
-    private analyzeLineSegment(
-      squares: Square[], 
-      startRow: number, 
-      startCol: number, 
-      dx: number, 
-      dy: number, 
-      piece: string
-  ): { threat: ThreatInfo | null } {
-      const positions: number[] = [];
-      const emptyPositions: number[] = [];
-      let count = 0;
-      let maxLength = 0;
-      let currentLength = 0;
-      let openEnds = 0;
+private analyzeLineSegment(
+  squares: Square[], 
+  startRow: number, 
+  startCol: number, 
+  dx: number, 
+  dy: number, 
+  piece: string
+): { threat: ThreatInfo | null } {
+  const positions: number[] = [];
+  const emptyPositions: number[] = [];
+  let count = 0;
+  let maxLength = 0;
+  let currentLength = 0;
+  let openEnds = 0;
+  let consecutiveCount = 0;
+  let maxConsecutiveCount = 0;
+  
+  // 增加检查长度，确保能捕捉到更长的连线威胁
+  for (let i = 0; i < 9; i++) {  // 增加检查长度从7到9
+      const row = startRow + i * dy;
+      const col = startCol + i * dx;
       
-      // 检查连续6个位置（可能形成五连）
-      for (let i = 0; i < 6; i++) {
-          const row = startRow + i * dy;
-          const col = startCol + i * dx;
-          
-          // 超出边界
-          if (row < 0 || row >= this.boardSize || col < 0 || col >= this.boardSize) {
-              break;
+      // 超出边界
+      if (row < 0 || row >= this.boardSize || col < 0 || col >= this.boardSize) {
+          break;
+      }
+      
+      const index = row * this.boardSize + col;
+      positions.push(index);
+      
+      if (squares[index] === piece) {
+          count++;
+          currentLength++;
+          consecutiveCount++;
+          maxLength = Math.max(maxLength, currentLength);
+          maxConsecutiveCount = Math.max(maxConsecutiveCount, consecutiveCount);
+      } else if (squares[index] === null) {
+          emptyPositions.push(index);
+          currentLength = 0;
+          // 修改这里，不要重置consecutiveCount，而是允许跳过一个空位继续计数
+          if (consecutiveCount > 0) {
+              // 检查是否已经有一个空位
+              const hasGap = positions.slice(-2, -1).some(pos => squares[pos] === null);
+              if (hasGap) {
+                  consecutiveCount = 0; // 如果已经有一个空位，则重置
+              }
           }
-          
-          const index = row * this.boardSize + col;
-          positions.push(index);
-          
-          if (squares[index] === piece) {
-              count++;
-              currentLength++;
-              maxLength = Math.max(maxLength, currentLength);
-          } else if (squares[index] === null) {
-              emptyPositions.push(index);
-              currentLength = 0;
-              openEnds++;
-          } else {
-              // 遇到对方棋子
-              break;
-          }
+      } else {
+          // 遇到对方棋子
+          break;
       }
-      
-      // 检查起始点前一个位置是否为空（判断是否有开放端点）
-      const prevRow = startRow - dy;
-      const prevCol = startCol - dx;
-      if (
-          prevRow >= 0 && prevRow < this.boardSize &&
-          prevCol >= 0 && prevCol < this.boardSize &&
-          squares[prevRow * this.boardSize + prevCol] === null
-      ) {
-          openEnds++;
-          positions.unshift(prevRow * this.boardSize + prevCol);
-          emptyPositions.push(prevRow * this.boardSize + prevCol);
-      }
-      
-      // 根据棋型评估威胁
-      if (count >= 5) {
-          // 五连或更多，胜利
-          return { threat: { type: 'win', score: 100000, positions } };
-      } else if (count === 4 && openEnds >= 1) {
-          // 活四或冲四
-          return { 
-              threat: { 
-                  type: openEnds === 2 ? 'open-four' : 'four', 
-                  score: openEnds === 2 ? 15000 : 4000, 
-                  positions 
-              } 
-          };
-      } else if (count === 3 && openEnds >= 1) {
-          // 活三或眠三
-          return { 
-              threat: { 
-                  type: openEnds === 2 ? 'open-three' : 'three', 
-                  score: openEnds === 2 ? 3000 : 600, 
-                  positions 
-              } 
-          };
-      } else if (count === 2 && openEnds >= 1) {
-          // 活二或眠二
-          return { 
-              threat: { 
-                  type: openEnds === 2 ? 'open-two' : 'two', 
-                  score: openEnds === 2 ? 500 : 100, 
-                  positions 
-              } 
-          };
-      }
-      
-      return { threat: null };
   }
+  
+  // 检查起始点前一个位置是否为空（判断是否有开放端点）
+  const prevRow = startRow - dy;
+  const prevCol = startCol - dx;
+  if (
+      prevRow >= 0 && prevRow < this.boardSize &&
+      prevCol >= 0 && prevCol < this.boardSize &&
+      squares[prevRow * this.boardSize + prevCol] === null
+  ) {
+      openEnds++;
+      positions.unshift(prevRow * this.boardSize + prevCol);
+      emptyPositions.push(prevRow * this.boardSize + prevCol);
+  }
+  
+  // 增加对非连续棋型的识别，如 X_XX_X 这种跳棋形式
+  // 计算总长度内的棋子数量
+  const totalPieces = positions.filter(pos => squares[pos] === piece).length;
+  
+  // 分析棋型中的间隔模式
+  let gapPattern = '';
+  for (const pos of positions) {
+      gapPattern += squares[pos] === piece ? 'X' : (squares[pos] === null ? '_' : 'O');
+  }
+  
+  // 增强跳棋形式的检测
+  const jumpPatterns = [
+      'X_XXX', 'XX_XX', 'XXX_X',  // 原有模式
+      'X__XXX', 'XXX__X', 'XX__XX', // 原有模式
+      'X_X_XX', 'XX_X_X', 'X_XX_X', // 新增模式
+      'X__X_XX', 'XX_X__X'          // 新增更复杂的模式
+  ];
+  const hasJumpPattern = jumpPatterns.some(pattern => gapPattern.includes(pattern));
+  
+  // 根据棋型评估威胁
+  if (hasJumpPattern || (totalPieces >= 4 && emptyPositions.length >= 1)) {
+      // 四子或更多且有空位，可能形成五连，提高威胁评分
+      return { 
+          threat: { 
+              type: 'potential-win', 
+              score: 12000, // 进一步提高分数
+              positions 
+          } 
+      };
+  } else if (count >= 5 || maxConsecutiveCount >= 5) {
+      // 五连或更多，胜利
+      return { threat: { type: 'win', score: 100000, positions } };
+  } else if (count === 4 && openEnds >= 1) {
+      // 活四或冲四
+      return { 
+          threat: { 
+              type: openEnds === 2 ? 'open-four' : 'four', 
+              score: openEnds === 2 ? 20000 : 8000, // 提高冲四和活四的分数
+              positions 
+          } 
+      };
+  } else if (count === 3 && openEnds >= 1) {
+      // 活三或眠三
+      return { 
+          threat: { 
+              type: openEnds === 2 ? 'open-three' : 'three', 
+              score: openEnds === 2 ? 5000 : 1500, // 提高眠三和活三的分数
+              positions 
+          } 
+      };
+  } else if (count === 2 && openEnds >= 1) {
+      // 活二或眠二
+      return { 
+          threat: { 
+              type: openEnds === 2 ? 'open-two' : 'two', 
+              score: openEnds === 2 ? 800 : 200, // 提高分数
+              positions 
+          } 
+      };
+  }
+  
+  return { threat: null };
+}
 
   private evaluatePosition(moveIndex: number): number {
       const row = Math.floor(moveIndex / this.boardSize);
@@ -510,29 +623,27 @@ class GomokuAI {
       return Math.max(0, 30 - distanceFromCenter * 2);
   }
 
-  exportGameRecord(squares: Square[], playerIsBlack: boolean): string {
-    let record = '五子棋对局记录\n';
-    record += `日期：${new Date().toLocaleDateString()}\n`;
-    record += `玩家执子：${playerIsBlack ? '黑' : '白'}\n`;
-    record += `难度级别：${
-        this.difficulty === 'easy' ? '简单' :
-        this.difficulty === 'medium' ? '中等' : '困难'
-    }\n\n`;
+exportGameRecord(squares: Square[], playerIsBlack: boolean): string {
+  // 创建 SGF 格式的棋谱
+  let sgf = `(;GM[4]FF[4]SZ[${this.boardSize}]GN[Gomoku]DT[${new Date().toISOString().split('T')[0]}]`;
+  sgf += `\nPB[${playerIsBlack ? 'Player' : 'AI'}]PW[${playerIsBlack ? 'AI' : 'Player'}]`;
+  sgf += `\nRU[Standard]`;
+  sgf += `\nDI[${this.difficulty}]`;
+  sgf += `\nPL[B]`; // 黑方永远先手
 
-    // 添加棋谱
-    record += '棋谱：\n';
-    
-    // 确保棋谱记录正确
-    const blackPiece = playerIsBlack ? this.playerPiece : this.computerPiece;
-    const whitePiece = playerIsBlack ? this.computerPiece : this.playerPiece;
-    
-    this.moveHistory.forEach((move, index) => {
-        const pieceColor = move.color === blackPiece ? '黑' : '白';
-        record += `${index + 1}. ${pieceColor} (${move.x}, ${move.y})\n`;
-    });
+  // 按照移动历史顺序添加落子记录
+  this.moveHistory.forEach((move, index) => {
+      const x = String.fromCharCode(97 + move.y); // 注意：这里需要交换 x 和 y
+      const y = String.fromCharCode(97 + move.x);
+      // 根据实际的棋子颜色确定 SGF 中的颜色标记
+      const color = (playerIsBlack && move.color === 'X') || (!playerIsBlack && move.color === 'O') ? 'B' : 'W';
+      sgf += `\n;${color}[${x}${y}]`;
+  });
 
-    return record;
+  sgf += ')';
+  return sgf;
 }
+
 }
 
 export const gomokuAI = new GomokuAI();

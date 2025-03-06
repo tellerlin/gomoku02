@@ -47,22 +47,21 @@ export default function Game() {
   const handleExportGameRecord = () => {
     console.log('导出棋谱按钮被点击');
     try {
-      // 检查 playerIsBlack 是否为 null
-      if (playerIsBlack === null) {
-        addGameLog('无法导出棋谱：游戏尚未开始');
-        return;
-      }
+        if (playerIsBlack === null) {
+            addGameLog('无法导出棋谱：游戏尚未开始');
+            return;
+        }
 
-      const gameRecord = gomokuAI.exportGameRecord(squares, playerIsBlack);
-      const blob = new Blob([gameRecord], { type: 'text/plain;charset=utf-8' });
-      const timestamp = new Date().toISOString().split('T')[0];
-      saveAs(blob, `gomoku-game-${timestamp}.txt`);
-      addGameLog('棋谱已导出');
+        const gameRecord = gomokuAI.exportGameRecord(squares, playerIsBlack);
+        const blob = new Blob([gameRecord], { type: 'application/x-go-sgf' });
+        const timestamp = new Date().toISOString().split('T')[0];
+        saveAs(blob, `gomoku-game-${timestamp}.sgf`); // 修改文件后缀为 .sgf
+        addGameLog('棋谱已导出');
     } catch (error) {
-      console.error('导出棋谱失败:', error);
-      addGameLog('导出棋谱失败，请检查控制台日志');
+        console.error('导出棋谱失败:', error);
+        addGameLog('导出棋谱失败，请检查控制台日志');
     }
-  };
+};
 
   const checkWinner = (squares: (string | null)[], pos: number): string | null => {
     const currentPlayer = squares[pos];
@@ -112,10 +111,15 @@ export default function Game() {
 
   const makeComputerMove = () => {
     if (winner || (isBlackNext === playerIsBlack)) return;
-    // 使用 gomokuAI 的 findBestMove 方法
+    
     const bestMove = gomokuAI.findBestMove(squares);
+    if (bestMove === -1 || squares[bestMove] !== null) {
+        console.error('Invalid AI move detected');
+        return;
+    }
+    
     handleClick(bestMove);
-  };
+};
 
   useEffect(() => {
     if (!gameStarted || winner) return;
@@ -139,18 +143,23 @@ export default function Game() {
 
     const currentTime = Date.now();
     if (lastMoveTime) {
-      const moveTime = (currentTime - lastMoveTime) / 1000;
-      addGameLog(`上一步耗时：${moveTime.toFixed(1)}秒`);
-      setMaxMoveTime(prev => Math.max(prev, moveTime));
-      setAverageMoveTime(prev => (prev * totalMoves + moveTime) / (totalMoves + 1));
+        const moveTime = (currentTime - lastMoveTime) / 1000;
+        addGameLog(`上一步耗时：${moveTime.toFixed(1)}秒`);
+        setMaxMoveTime(prev => Math.max(prev, moveTime));
+        setAverageMoveTime(prev => (prev * totalMoves + moveTime) / (totalMoves + 1));
     }
 
     const newSquares = squares.slice();
     newSquares[i] = isBlackNext ? 'X' : 'O';
     setSquares(newSquares);
+    
+    // 记录移动（无论是玩家还是AI）
+    gomokuAI.recordMove(i, isBlackNext ? 'X' : 'O');
+    
     setLastMoveTime(currentTime);
     setTotalMoves(prev => prev + 1);
     setLastMove(i);
+
 
     const newWinner = checkWinner(newSquares, i);
     if (newWinner) {
@@ -189,7 +198,10 @@ export default function Game() {
     setPlayerIsBlack(null);
     setGameLog(['请选择执黑或执白']);
     setLastMove(null);
-  };
+    
+    // 使用新的公共方法重置 AI 的移动历史
+    gomokuAI.resetMoveHistory();
+};
 
   const updateScores = (winner: string) => {
     if ((winner === 'X' && playerIsBlack) || (winner === 'O' && !playerIsBlack)) {
@@ -203,9 +215,9 @@ export default function Game() {
     ? `获胜者: ${winner === 'X' ? '黑棋' : '白棋'}`
     : `下一步: ${isBlackNext ? '黑棋' : '白棋'}${isBlackNext !== playerIsBlack ? ' (AI思考中...)' : ' (请您落子)'}`;
 
-  return (
-    <div className="flex flex-col md:flex-row gap-8 p-4 max-w-7xl mx-auto">
-      <div className="flex-shrink-0 w-full md:w-auto">
+    return (
+      <div className="flex flex-col md:flex-row gap-8 p-4 max-w-7xl mx-auto min-h-screen">    
+        <div className="flex-shrink-0 w-full md:w-auto">
       {!gameStarted ? (
           <PlayerSelectionModal 
             isOpen={true} 
