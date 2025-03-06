@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Board from './Board';
 import PlayerSelectionModal from './PlayerSelectionModal';
+import { gomokuAI } from '../utils/gomokuAI';
 
 const BOARD_SIZE = 15;
 const WIN_CONDITION = 5;
@@ -23,10 +24,25 @@ export default function Game() {
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [showHints, setShowHints] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
-
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  
   const addGameLog = (message: string) => {
     const time = new Date().toLocaleTimeString();
     setGameLog(prev => [`[${time}] ${message}`, ...prev]);
+  };
+
+  // 添加难度设置处理函数
+  const handleDifficultyChange = (newDifficulty: 'easy' | 'medium' | 'hard') => {
+    setDifficulty(newDifficulty);
+    addGameLog(`难度设置已更改为: ${
+      newDifficulty === 'easy' ? '简单' : 
+      newDifficulty === 'medium' ? '中等' : '困难'
+    }`);
+    
+    // 如果游戏已经开始，可以在这里通知 AI 难度变化
+    if (gameStarted) {
+      gomokuAI.setDifficulty(newDifficulty);
+    }
   };
 
   const checkWinner = (squares: (string | null)[], pos: number): string | null => {
@@ -154,10 +170,11 @@ export default function Game() {
     return bestMove;
   };
 
+  // 删除原来的evaluatePosition和findBestMove函数
+  
   const makeComputerMove = () => {
     if (winner || (isBlackNext === playerIsBlack)) return;
-
-    const bestMove = findBestMove(squares);
+    const bestMove = gomokuAI.findBestMove(squares);
     handleClick(bestMove);
   };
 
@@ -210,12 +227,21 @@ export default function Game() {
     }
   };
 
-  const handleColorSelect = (isBlack: boolean) => {
+  // 修改 handleColorSelect 函数，接收难度参数
+  const handleColorSelect = (isBlack: boolean, difficulty: 'easy' | 'medium' | 'hard') => {
     setPlayerIsBlack(isBlack);
     setGameStarted(true);
-    setGameLog([`游戏开始，玩家选择执${isBlack ? '黑' : '白'}子`]);
+    setDifficulty(difficulty);
+    setGameLog([`游戏开始，玩家选择执${isBlack ? '黑' : '白'}子，难度：${
+      difficulty === 'easy' ? '简单' : 
+      difficulty === 'medium' ? '中等' : '困难'
+    }`]);
+    
+    // 设置 AI 难度
+    gomokuAI.setDifficulty(difficulty);
   };
 
+  // 在重置游戏时，我们需要重置所有状态，包括难度选择
   const resetGame = () => {
     setSquares(Array(BOARD_SIZE * BOARD_SIZE).fill(null));
     setIsBlackNext(true);
@@ -228,6 +254,7 @@ export default function Game() {
     setPlayerIsBlack(null);
     setGameLog(['请选择执黑或执白']);
     setLastMove(null);
+    // 不重置难度，保持用户之前的选择
   };
 
   const updateScores = (winner: string) => {
@@ -246,23 +273,10 @@ export default function Game() {
     <div className="flex flex-col md:flex-row gap-8 p-4 max-w-7xl mx-auto">
       <div className="flex-shrink-0 w-full md:w-auto">
         {!gameStarted ? (
-          <div className="text-center mb-4">
-            <h2 className="text-xl font-bold mb-4">请选择您要执的棋子</h2>
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={() => handleColorSelect(true)}
-                className="px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                执黑先行
-              </button>
-              <button
-                onClick={() => handleColorSelect(false)}
-                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                执白后行
-              </button>
-            </div>
-          </div>
+          <PlayerSelectionModal 
+            isOpen={true} 
+            onSelect={(piece, difficulty) => handleColorSelect(piece === 'X', difficulty)} 
+          />
         ) : (
           <>
             <div className={`text-xl font-bold mb-4 p-2 rounded ${
@@ -326,6 +340,7 @@ export default function Game() {
         <div className="panel-card">
           <h3 className="text-lg font-bold mb-3">游戏设置</h3>
           <div className="space-y-2">
+            {/* 显示提示开关 */}
             <div className="flex items-center justify-between">
               <span>显示提示</span>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -337,6 +352,37 @@ export default function Game() {
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
+            </div>
+            
+            {/* 添加难度选择 */}
+            <div className="mt-4">
+              <span className="block mb-2">难度设置</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDifficultyChange('easy')}
+                  className={`px-3 py-1 rounded ${
+                    difficulty === 'easy' ? 'bg-blue-500 text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  简单
+                </button>
+                <button
+                  onClick={() => handleDifficultyChange('medium')}
+                  className={`px-3 py-1 rounded ${
+                    difficulty === 'medium' ? 'bg-blue-500 text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  中等
+                </button>
+                <button
+                  onClick={() => handleDifficultyChange('hard')}
+                  className={`px-3 py-1 rounded ${
+                    difficulty === 'hard' ? 'bg-blue-500 text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  困难
+                </button>
+              </div>
             </div>
           </div>
         </div>
