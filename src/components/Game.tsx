@@ -45,15 +45,21 @@ export default function Game() {
   };
 
   const handleExportGameRecord = () => {
-    console.log('导出棋谱按钮被点击'); // 调试日志
+    console.log('导出棋谱按钮被点击');
     try {
-      const gameRecord = gomokuAI.exportGameRecord(squares, playerIsBlack!);
+      // 检查 playerIsBlack 是否为 null
+      if (playerIsBlack === null) {
+        addGameLog('无法导出棋谱：游戏尚未开始');
+        return;
+      }
+
+      const gameRecord = gomokuAI.exportGameRecord(squares, playerIsBlack);
       const blob = new Blob([gameRecord], { type: 'text/plain;charset=utf-8' });
       const timestamp = new Date().toISOString().split('T')[0];
       saveAs(blob, `gomoku-game-${timestamp}.txt`);
       addGameLog('棋谱已导出');
     } catch (error) {
-      console.error('导出棋谱失败:', error); // 捕获并记录错误
+      console.error('导出棋谱失败:', error);
       addGameLog('导出棋谱失败，请检查控制台日志');
     }
   };
@@ -104,87 +110,9 @@ export default function Game() {
     return null;
   };
 
-  const getAvailableMoves = (squares: (string | null)[]) => {
-    return squares
-      .map((square, index) => (square === null ? index : null))
-      .filter((index): index is number => index !== null);
-  };
-
-  const evaluatePosition = (squares: (string | null)[], pos: number, player: string) => {
-    let score = 0;
-    const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
-    const row = Math.floor(pos / BOARD_SIZE);
-    const col = pos % BOARD_SIZE;
-
-    for (const [dx, dy] of directions) {
-      let count = 1;
-      let blocked = 0;
-
-      // 正向检查
-      for (let i = 1; i < 5; i++) {
-        const newRow = row + i * dy;
-        const newCol = col + i * dx;
-        if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE) {
-          blocked++;
-          break;
-        }
-        const square = squares[newRow * BOARD_SIZE + newCol];
-        if (square === player) count++;
-        else if (square !== null) {
-          blocked++;
-          break;
-        } else break;
-      }
-
-      // 反向检查
-      for (let i = 1; i < 5; i++) {
-        const newRow = row - i * dy;
-        const newCol = col - i * dx;
-        if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE) {
-          blocked++;
-          break;
-        }
-        const square = squares[newRow * BOARD_SIZE + newCol];
-        if (square === player) count++;
-        else if (square !== null) {
-          blocked++;
-          break;
-        } else break;
-      }
-
-      // 评分
-      if (count >= 5) score += 100000;
-      else if (count === 4 && blocked === 0) score += 10000;
-      else if (count === 4 && blocked === 1) score += 1000;
-      else if (count === 3 && blocked === 0) score += 1000;
-      else if (count === 3 && blocked === 1) score += 100;
-      else if (count === 2 && blocked === 0) score += 100;
-    }
-
-    return score;
-  };
-
-  const findBestMove = (squares: (string | null)[]) => {
-    const availableMoves = getAvailableMoves(squares);
-    let bestScore = -Infinity;
-    let bestMove = availableMoves[0];
-
-    for (const move of availableMoves) {
-      const score = evaluatePosition(squares, move, 'O');
-      const defensiveScore = evaluatePosition(squares, move, 'X') * 0.9;
-      const finalScore = score + defensiveScore;
-
-      if (finalScore > bestScore) {
-        bestScore = finalScore;
-        bestMove = move;
-      }
-    }
-
-    return bestMove;
-  };
-
   const makeComputerMove = () => {
     if (winner || (isBlackNext === playerIsBlack)) return;
+    // 使用 gomokuAI 的 findBestMove 方法
     const bestMove = gomokuAI.findBestMove(squares);
     handleClick(bestMove);
   };
@@ -235,16 +163,18 @@ export default function Game() {
     }
   };
 
-  const handleColorSelect = (isBlack: boolean, difficulty: 'easy' | 'medium' | 'hard') => {
+  const handleColorSelect = (isBlack: boolean) => {
     setPlayerIsBlack(isBlack);
     setGameStarted(true);
-    setDifficulty(difficulty);
     setGameLog([`游戏开始，玩家选择执${isBlack ? '黑' : '白'}子，难度：${
       difficulty === 'easy' ? '简单' : 
       difficulty === 'medium' ? '中等' : '困难'
     }`]);
     
+    // 设置 AI 难度和棋子颜色
     gomokuAI.setDifficulty(difficulty);
+    gomokuAI.setPieces(isBlack ? 'X' : 'O');  // 确保正确设置玩家棋子
+    console.log(`游戏开始：玩家执${isBlack ? '黑' : '白'}子`);
   };
 
   const resetGame = () => {
@@ -276,10 +206,10 @@ export default function Game() {
   return (
     <div className="flex flex-col md:flex-row gap-8 p-4 max-w-7xl mx-auto">
       <div className="flex-shrink-0 w-full md:w-auto">
-        {!gameStarted ? (
+      {!gameStarted ? (
           <PlayerSelectionModal 
             isOpen={true} 
-            onSelect={(piece, difficulty) => handleColorSelect(piece === 'X', difficulty)} 
+            onSelect={(piece) => handleColorSelect(piece === 'X')} 
           />
         ) : (
           <>

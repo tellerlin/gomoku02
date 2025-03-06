@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Board from '../components/Board';
 import PlayerSelectionModal from '../components/PlayerSelectionModal';
+import { gomokuAI } from '../utils/gomokuAI';
 
 export default function Game() {
   const [history, setHistory] = useState([Array(225).fill(null)]);
@@ -123,79 +124,9 @@ export default function Game() {
     return lines;
   }
   
-  // 寻找最佳落子位置
-  function findBestMove(squares: (string | null)[]) {
-    const player = xIsNext ? 'X' : 'O';
-    let bestScore = -Infinity;
-    let bestMove = -1;
-    
-    // 获取所有空位置
-    const emptySquares = squares.map((square, index) => 
-      square === null ? index : null
-    ).filter(index => index !== null) as number[];
-    
-    // 如果是第一步，优先选择天元
-    if (emptySquares.length === 225) {
-      const center = Math.floor(size / 2) * size + Math.floor(size / 2);
-      return center;
-    }
-    
-    // 只考虑已有棋子周围的空位
-    const candidateMoves = new Set<number>();
-    
-    for (let i = 0; i < squares.length; i++) {
-      if (squares[i] !== null) {
-        const row = Math.floor(i / size);
-        const col = i % size;
-        
-        // 检查周围8个方向的空位
-        for (let dr = -2; dr <= 2; dr++) {
-          for (let dc = -2; dc <= 2; dc++) {
-            if (dr === 0 && dc === 0) continue;
-            
-            const newRow = row + dr;
-            const newCol = col + dc;
-            
-            if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
-              const newIndex = newRow * size + newCol;
-              if (squares[newIndex] === null) {
-                candidateMoves.add(newIndex);
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    // 如果没有候选位置，则考虑所有空位
-    const movesToEvaluate = candidateMoves.size > 0 
-      ? Array.from(candidateMoves) 
-      : emptySquares;
-    
-    // 评估每个候选位置
-    for (const move of movesToEvaluate) {
-      // 模拟落子
-      squares[move] = player;
-      
-      // 评估落子后的局面
-      const score = evaluateBoard(squares, player);
-      
-      // 恢复棋盘
-      squares[move] = null;
-      
-      // 更新最佳落子
-      if (score > bestScore) {
-        bestScore = score;
-        bestMove = move;
-      }
-    }
-    
-    return bestMove;
-  }
-  
   function makeAIMove() {
     const nextSquares = currentSquares.slice();
-    const bestMove = findBestMove(nextSquares);
+    const bestMove = gomokuAI.findBestMove(nextSquares);
     
     if (bestMove !== -1) {
       nextSquares[bestMove] = xIsNext ? 'X' : 'O';
@@ -223,7 +154,8 @@ export default function Game() {
   function handlePlayerSelection(piece: 'X' | 'O') {
     setIsPlayerX(piece === 'X');
     setShowModal(false);
-  }
+    gomokuAI.setPieces(piece);
+}
   
   // 修改悔棋功能，回退2步（玩家和AI各一步）
   function undoMove() {
